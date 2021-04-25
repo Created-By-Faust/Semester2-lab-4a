@@ -1,39 +1,161 @@
-#include "table.h"
+#include "tree.h"
 
-KeySpace2 *init_keySpace2(int len) {
-    KeySpace2 *keySpace2 = malloc(len * sizeof(KeySpace2));
-    for (int i = 0; i < len; i++) {
-        keySpace2[i].busy = 0;
-        keySpace2[i].info = 0;
-        keySpace2[i].key = 0;
+int add_record_wr(Node **root, int key, char *data, Node *parent) {
+    if (*root == 0) {
+        *root = malloc(sizeof(Node));
+        Node *elem = *root;
+        elem->key = key;
+        elem->data = data;
+        elem->parent = parent;
+        elem->left = 0;
+        elem->right = 0;
+        return 0;
+    } else {
+        if (key > (*root)->key)
+            return add_record_wr(&(*root)->right, key, data, *root);
+        else if (key < (*root)->key)
+            return add_record_wr(&(*root)->left, key, data, *root);
+        else
+            return -1;
     }
-    return keySpace2;
 }
 
-Table *init_table() {
-    Table *table = malloc(sizeof(Table));
-    table->ks1 = 0;
-
-    table->msize2 = 10;
-    table->ks2 = init_keySpace2(table->msize2);
-
-    return table;
+int add_record(Node **root, int key, char *data) {
+    return add_record_wr(root, key, data, 0);
 }
 
-int hash(unsigned char *str, int len) {
-    
-    int size_table = msize;
-    
-    unsigned int hashval;
-
-    for (hashval = 0; *str != '\0'; str++){
-        hashval = *str;
-        
+void print_bigger_than_key(Node *node, int key) {
+    if (node) {
+        print_bigger_than_key(node->right, key);
+        if (node->key > key) {
+            printf("%d %s\n", node->key, node->data);
+            print_bigger_than_key(node->left, key);
+        }
     }
-    
-    return hashval % size_table;
 }
 
+char *search_by_key(Node *node, int key) {
+    if (node) {
+        if (key > node->key)
+            return search_by_key(node->right, key);
+        else if (key < node->key)
+            return search_by_key(node->left, key);
+        else
+            return node->data;
+    } else {
+        return 0;
+    }
+}
+
+Node *min_key(Node *node) {
+    if (node) {
+        if (node->left) {
+            return min_key(node->left);
+        } else {
+            return node;
+        }
+    } else {
+        return 0;
+    }
+}
+
+Node *minimum(Node *parent) {
+    if (parent->left) {
+        return parent->left;
+    } else if (parent->right) {
+        return parent->right;
+    } else {
+        return parent;
+    }
+}
+
+int delete_by_key(Node **root, unsigned int key) {
+    if (*root) {
+        if (key < (*root)->key)
+            return delete_by_key(&(*root)->left, key);
+        else if (key > (*root)->key)
+            return delete_by_key(&(*root)->right, key);
+        else if ((*root)->left && (*root)->right) {
+            Node *node = minimum((*root)->right);
+            (*root)->key = node->key;
+            free((*root)->data);
+            (*root)->data = node->data;
+            return delete_by_key(&(*root)->right, (*root)->key);
+        } else {
+            if ((*root)->left) {
+                *root = (*root)->left;
+            } else if ((*root)->right) {
+                *root = (*root)->right;
+            } else {
+                free(*root);
+                *root = 0;
+            }
+            return 0;
+        }
+    } else {
+        return -1;
+    }
+}
+
+void print_tree(Node *node, int depth) {
+    if (node) {
+        print_tree(node->right, depth + 1);
+        for (int i = 0; i < depth; ++i)
+            printf("\t");
+        printf("%d (%s)\n", node->key, node->data);
+        print_tree(node->left, depth + 1);
+    }
+}
+
+void print_tree_wrapper(Node *node) {
+    print_tree(node, 0);
+}
+
+int load_from_file(Node **tree, char *file) {
+    FILE *fp = fopen(file, "r");
+    int wait_for_index = 1;
+    int index;
+    char *line = 0;
+    size_t len = 0;
+    ssize_t read;
+    if (!fp)
+        return -1;
+
+    while ((read = getline(&line, &len, fp)) != -1) {
+        printf("Retrieved line of length %zu:\n", read);
+        printf("%s", line);
+        if (wait_for_index) {
+            wait_for_index = 0;
+            long index_l = strtol(line, 0, 10);
+            index = (int) index_l;
+        } else {
+            wait_for_index = 1;
+            if (line[read - 1] != '\n' && line[read - 1] != '\r')
+                read++;
+            char *data = malloc(read);
+            strncpy(data, line, read);
+            data[read - 1] = 0;
+            if (add_record(tree, index, data) < 0) {
+                free(data);
+            }
+            len = 0;
+        }
+        free(line);
+        line = 0;
+    }
+    free(line);
+    fclose(fp);
+    return 0;
+}
+
+void free_tree(Node *tree) {
+    if (tree) {
+        free_tree(tree->left);
+        free_tree(tree->right);
+        free(tree->data);
+        free(tree);
+    }
+}
 KeySpace2 *search(KeySpace2 *ptable, int size, char *k) {
     int strt, i, h = 1; /* шаг перемешивания */
     /* вычисление исходной позиции таблицы */
